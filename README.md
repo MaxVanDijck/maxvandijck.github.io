@@ -56,5 +56,6 @@ TailwindCSS is already configured in this repo, so you can start using it withou
 ## Credits
 
 [Forked From](https://github.com/surjithctly/astroship) by [surjithctly](https://github.com/surjithctly)
+
 [Hero Illustration](https://www.figma.com/community/file/1108400791662599811) by [Streamline](https://www.streamlinehq.com/)
 
