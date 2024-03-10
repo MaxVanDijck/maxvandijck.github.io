@@ -18,14 +18,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
       - name: Checkout your repository using git
         uses: actions/checkout@v4
-      - name: Install dependencies with Bun
-        run: bun install
-      - name: Build your project with Bun
-        run: bun run build
       - name: Install, build, and upload your site
         uses: withastro/action@v2
         with:
