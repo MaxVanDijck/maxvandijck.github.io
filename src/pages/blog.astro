@@ -24,7 +24,7 @@ publishedBlogEntries.sort(function (a, b) {
       </Fragment>
     </Sectionhead>
     <main class="mt-8">
-      <ul class="grid grid-cols-3 gap-4 max-w-4xl mx-auto">
+      <ul class="grid grid-cols-4 gap-4 max-w-1xl mx-auto">
         {
           publishedBlogEntries.map((blogPostEntry, index) => (
             <li>
@@ -41,11 +41,16 @@ publishedBlogEntries.sort(function (a, b) {
                     class="w-full object-cover object-center bg-white"
                   />
 
-                    <h2 class="text-lg font-semibold leading-snug tracking-tight mt-1 ">
+                    <h2 class="text-lg font-semibold leading-snug tracking-tight mt-4 ">
                       {blogPostEntry.data.title}
                     </h2>
 
-                    <div class="flex gap-1 mt-1">
+
+                    <h2 class="text-sm text-gray-600 leading-snug tracking-tight mt-1 ">
+                      {blogPostEntry.data.snippet.slice(0, 90).trim().replace(/\.+$/, "")}...
+                    </h2>
+
+                    <div class="flex gap-1 mt-2">
                       <span class="text-xs text-gray-400">
                         {blogPostEntry.data.author}
                       </span>
