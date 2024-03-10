@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies with Bun
         run: bun install
       - name: Build your project with Bun
-        run: bun build
+        run: bun run build
       - name: Install, build, and upload your site
         uses: withastro/action@v2
         with:
