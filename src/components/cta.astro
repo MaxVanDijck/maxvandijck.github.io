@@ -1,5 +1,6 @@
 ---
 import Link from "./ui/link.astro";
+import { Icon } from "astro-icon";
 ---
 
 <div
@@ -7,7 +8,38 @@ import Link from "./ui/link.astro";
   <h2 class="text-white text-4xl md:text-4xl tracking-tight">
     Want to get in touch?
   </h2>
-  <div class="flex mt-5">
-    <Link href="/contact" style="inverted">Contact</Link>
-  </div>
+    <div class="mt-6 flex flex-col sm:flex-row gap-3">
+      <Link
+        size="lg"
+        style="outline"
+        rel="noopener"
+        href="https://github.com/maxvandijck"
+        class="flex gap-1 items-center justify-center"
+        target="_blank">
+        <Icon class="text-black w-6 h-6" name="bx:bxl-github" />
+         GitHub
+      </Link>
+      <Link
+        href="#"
+        href="https://linkedin.com/maxvandijck"
+        size="lg"
+        style="outline"
+        rel="noopener"
+        class="flex gap-1 items-center justify-center"
+        target="_blank">
+        <Icon class="text-black w-6 h-6" name="mdi:linkedin" />
+         LinkedIn
+      </Link>
+      <Link
+        href="#"
+        href="/contact"
+        size="lg"
+        style="outline"
+        rel="noopener"
+        class="flex gap-1 items-center justify-center"
+        target="_blank">
+        <Icon class="text-black w-6 h-6" name="bx:bx-mail-send" />
+         Contact
+      </Link>
+    </div>
 </div>
