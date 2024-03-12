@@ -1,0 +1,48 @@
+---
+draft: true
+title: "Attention is All You Need"
+snippet: "This post is an interpretation of the paper \"Attention is All You Need\". The purpose is to extend on The Annotated Transformer by further reordering and simplification of the"
+publishDate: "2024-01-01 00:00"
+image: {
+  src: "https://images.unsplash.com/photo-1542393545-10f5cde2c810?&fit=crop&w=430&h=240",
+  alt: "typography"
+}
+category: "Data Science"
+author: "Max van Dijck"
+tags: [AI, datascience]
+---
+
+This post is an interpretation of the paper "Attention is All You Need". The purpose is to extend on [The Annotated Transformer](https://nlp.seas.harvard.edu/annotated-transformer/)
+by further reordering and simplification of the paper. The motivation behind this is to increase clarity by starting with our input tensors and working through the model layer by layer rather
+than starting at a point already deep in the weeds (at the encoder) but building up to that point by starting at an input sentence, tokenizing and then creating the $Q\:K\:V$ or query, key and value matrices. 
+
+## Tokenisation, Embedding and Linear Transformation
+
+To get started at the very input of the transformer, let's assume a simple sentence and create an example tokenisation for the sentence. Normally we would use a [tokenizer](https://platform.openai.com/tokenizer) but we will skip this for the sake of simplicity. Here is our tensor, we include the batch dimension as to best reflect what happens in a built out example:
+```python
+sentence = ["our", "input", "sentence"]
+input_tokens = torch.tensor([[0, 1, 2]]) # Batch, Sequence
+```
+
+Now we can create the embedding layer of our network. An embedding layer stores a mapping from a vocabulary of tokens to a n-dimensional vector space. In our case we use a vocabulary size of three and an embedding size of three since we are only training on this simple example, however a typical LLM would have a vocabulary size in the tens of thousands and embedding size in the thousands. Now if we pass our tensor to the embedding layer we will get an output of shape: Batch, Sequence, Embedding. Viewing the tensor after the embedding we can see each token in our sequence has been mapped to a embedding of three values.
+
+```python
+vocabulary_size = 3
+embedding_size = 3
+embedding = torch.nn.embedding(vocabulary_size, embedding_size)
+embedded_sentence = embedding(input_tokens) # Batch, Sequence, Embedding
+```
+```
+embedded_sentence
+> tensor([[[ 0.6380, -1.4403,  0.9792],   # our
+           [-1.5645,  0.0593,  0.4939],   # input
+           [-0.1139, -1.0340, -0.0034]]], # sentence
+            grad_fn=<EmbeddingBackward0>)
+```
+
+Given our embedded vector, we can now create our $Q\:K\:V$ matrices used in the attention mechanism mentioned in the paper
+
+$Attention(Q, K, V ) = softmax(\frac{QK^{T}}{\sqrt{dk}})V $
+
+
+
