@@ -14,7 +14,7 @@ tags: [AI, datascience]
 
 This post is an interpretation of the paper "Attention is All You Need". The purpose is to extend on [The Annotated Transformer](https://nlp.seas.harvard.edu/annotated-transformer/)
 by further reordering and simplification of the paper. The motivation behind this is to increase clarity by starting with our input tensors and working through the model layer by layer rather
-than starting at a point already deep in the weeds (at the encoder) but building up to that point by starting at an input sentence, tokenizing and then creating the $Q\:K\:V$ or query, key and value matrices. 
+than starting at a point already deep in the weeds (at the encoder) but building up to that point by starting at an input sentence, tokenizing and then creating the $Q\:K\:V$ or query, key and value matrices. Since this paper is a common starting point for those learning about the transformer architecture we try to make this post as approachable as possible.
 
 ## Tokenisation, Embedding and Linear Transformation
 
@@ -42,7 +42,22 @@ embedded_sentence
 
 Given our embedded vector, we can now create our $Q\:K\:V$ matrices used in the attention mechanism mentioned in the paper
 
-$Attention(Q, K, V ) = softmax(\frac{QK^{T}}{\sqrt{dk}})V $
+$Attention(Q, K, V) = softmax(\frac{QK^{T}}{\sqrt{d_{k}}})V $
 
+We do this by taking our embedded sentence and feeding it into three seperate fully connected layers to obtain the query, key and value matrices:
 
+```python
+hidden_size = 64  
+linear_transform_Q = torch.nn.Linear(embedding_size, hidden_size)
+linear_transform_K = torch.nn.Linear(embedding_size, hidden_size)
+linear_transform_V = torch.nn.Linear(embedding_size, hidden_size)
+
+Q = linear_transform_Q(embedded_sentence) # Batch, Sequence, transformed_embeddings
+K = linear_transform_K(embedded_sentence) # """
+V = linear_transform_V(embedded_sentence) # """
+```
+
+## Scaled Dot-product Attention
+
+With our $Q\:K\:V$ matrices we will now perform the scaled dot-product attention introduced in the paper. We take the query matrix and multiply it by the transposed key matrix. Then we divide the resulting matrix by the square root length of the transformed embeddings $\sqrt{d_{k}}$, which is equal to the hidden size of the linear transform, in our case 64. 
 
