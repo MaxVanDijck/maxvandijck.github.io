@@ -29,7 +29,7 @@ Now we can create the embedding layer of our network. An embedding layer stores 
 ```python
 vocabulary_size = 3
 embedding_size = 3
-embedding = torch.nn.embedding(vocabulary_size, embedding_size)
+embedding = torch.nn.Embedding(vocabulary_size, embedding_size)
 embedded_sentence = embedding(input_tokens) # Batch, Sequence, Embedding
 ```
 ```
@@ -40,11 +40,7 @@ embedded_sentence
             grad_fn=<EmbeddingBackward0>)
 ```
 
-Given our embedded vector, we can now create our $Q\:K\:V$ matrices used in the attention mechanism mentioned in the paper
-
-$Attention(Q, K, V) = softmax(\frac{QK^{T}}{\sqrt{d_{k}}})V $
-
-We do this by taking our embedded sentence and feeding it into three seperate fully connected layers to obtain the query, key and value matrices:
+Given our embedded vector, we can now create our $Q\:K\:V$ matrices used in the attention mechanism mentioned in the paper. We do this by taking our embedded sentence and feeding it into three seperate fully connected layers to obtain the query, key and value matrices
 
 ```python
 hidden_size = 64  
@@ -52,12 +48,92 @@ linear_transform_Q = torch.nn.Linear(embedding_size, hidden_size)
 linear_transform_K = torch.nn.Linear(embedding_size, hidden_size)
 linear_transform_V = torch.nn.Linear(embedding_size, hidden_size)
 
-Q = linear_transform_Q(embedded_sentence) # Batch, Sequence, transformed_embeddings
+Q = linear_transform_Q(embedded_sentence) # batch, sequence, embedding_size
 K = linear_transform_K(embedded_sentence) # """
 V = linear_transform_V(embedded_sentence) # """
 ```
 
 ## Scaled Dot-product Attention
 
-With our $Q\:K\:V$ matrices we will now perform the scaled dot-product attention introduced in the paper. We take the query matrix and multiply it by the transposed key matrix. Then we divide the resulting matrix by the square root length of the transformed embeddings $\sqrt{d_{k}}$, which is equal to the hidden size of the linear transform, in our case 64. 
+With our $Q\:K\:V$ matrices we will now perform the scaled dot-product attention introduced in the paper. We take the query matrix and multiply it by the transposed key matrix. Then we divide the resulting matrix by the square root length of the transformed embeddings $\sqrt{d_{k}}$, which is equal to the square-root of the linear transform's hidden size, in our case 64 -> 8. After this division step the output is optionally masked and put through a softmax function. Then dropout is applied and finally multiplied by the value matrix. The equation shown in the paper is the following (which excludes detailing the mask and dropout which we will get into, along with the purpose of the query, key and value matrices and the intuition behind them.
+
+$Attention(Q, K, V) = softmax(\frac{QK^{T}}{\sqrt{d_{k}}})V $
+
+And implemented as Pytorch code
+
+```python
+def attention(
+      query: torch.Tensor, 
+      key: torch.Tensor, 
+      value: torch.Tensor, 
+      mask: torch.Tensor | None = None, 
+      dropout: torch.nn.Module | None = None
+    ):
+    query_embedding_len = query.size(-1) # same as embedding hidden size (64 in example)
+    key = key.transpose(-2, -1) # batch, embedding_size, sequence
+    attention_scores = query @ key / math.sqrt(query_embedding_len)
+    if mask:
+        attention_scores = attention_scores.masked_fill(mask == 0, -1e9)
+    attention_scores = attention_scores.softmax(dim=-1)
+    if dropout:
+        attention_scores = dropout(attention_scores)
+    return attention_scores @ value, attention_scores
+```
+
+### Query, Key, Value
+
+Now, we're familiar with a basic dictionary/hashmap which works to map from an exact key to a specific value
+
+```python
+d = {
+   "fun": 10,
+   "exciting": 9,
+   "boring": -3,
+ }
+d["fun"] # 10
+```
+
+However, we want to do a lookup based on the meaning of the word and return a vector containing how likely it is that each key in our lookup table is likely related to our query, or rather how much *attention* we want to pay to each value based on the query. So for example, let's take the word "positive" and assume that we have a 45% match for both "fun" and "exciting" and only a 10% match for "boring".
+
+```python
+query = "exciting"
+0.45 * d["fun"] + 0.45 * d["exciting"] + 0.1 * d["boring"] # 5.65
+```
+
+In this example, I've created the attention scores by how relevant each key was to the word "exciting" however how do we really arrive at these attention scores? Now if we think back to the previous section we will be reminded that our query and key matrices have the dimensions Sequence and Embedding (plus batch as the first dimension, which we don't really need to worry about). The embedding is the crucial part here and having an understanding of how dot products work in relation to the similarity between two vectors helps. The key ideas are as follows
+- If two vectors are in the same direction their dot product is at it's largest $n > 0$
+- If two vectors are in the opposite direction their dot product is at it's smallest $n < 0$
+- If two vectors are perpindicular their dot product will be 0 $n = 0$
+
+So when we have two *word embeddings*, our query vector's word embedding and our key vector's word embedding, and we take the dot product we get a measure of how relevant the key is in relation to the query based on how similar the two are in vector space. We've created a [desmos visualization](https://www.desmos.com/calculator/b7xvrosoyp) with two vectors and their resulting dot product to demonstrate this behaviour. This similarity is called the attention score. What's happened is that our query embedding is a vector that when mapped into the vector space of the key, is surrounded by tokens that are most relevant to pay attention to. If we change our keys into vectors where our hash-function is now similar to $query \cdot value$ we now get something that looks a bit like this:
+
+```python
+query = [8, -5]
+d = {
+  [5, -3]: 10, # fun 
+  [6, -1]: 9,  # exciting
+  [-4, 8]: 3, # boring
+}
+attention_scores = [8*5 + -5*-3, 8*6 + -5*-1, 8*-4 + -5*8] # [55, 53, -72]
+```
+
+As you can see if our query embedding is close within a vector space to the "fun" and "exciting" keys it results in a high attention to these values and opposite to the "boring" key resulting in a low attention score. In context of our pytorch code this is
+
+```python
+key = key.transpose(-2, -1)
+attention_scores = query @ key
+```
+
+Following this, the attention scores are then divided by the square-root of the embedding length and put through a softmax function. As the embedding length grows in size the resultant dot products can get quite large in magnitude which would make the output values from the softmax extremely close to 0 and 1 which may cause vanishing gradients which is why we scale the attention scores (henced *scaled* dot product attention). And now we multiply our attention scores with the values to create a matrix where each element of the sequence contains a new vector embedding that is a weighted combination of the orignal value matrix's embedding for each work by the attention scores for that particular token.
+
+```diff
++ query_embedding_len = query.size(-1)
+  key = key.transpose(-2, -1)
+- attention_scores = query @ key
++ attention_scores = query @ key / math.sqrt(query_embedding_len)
++ attention_scores = attention_scores.softmax(dim=-1)
++ return attention_scores @ value, attention_scores
+```
+
+Now we did skip the masking and dropout layer to focus on the explanation of the three matrices. Dropout is as expected used as a regularization method to prevent the transformer for overfitting. The masking is used in the decoder stack to prevent current predictions from referencing tokens in the future which could result in incorrect sequence generation. We will dive deeper into this when we address the decoder stack.
 
