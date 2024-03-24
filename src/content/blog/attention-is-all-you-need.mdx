@@ -143,9 +143,36 @@ Now we did skip the masking and dropout layer to focus on the explanation of the
 
 ## Multi-Head Attention
 
-Multi-Head Attention consists of combining our linear transform step and the scaled dot-product attention step into a single function, this becomes a single head, and applying this function multiple times on the input embedded vector. We take the results from each head and simply concatentate them together, then pass the result through a final linear layer as shown in the following figure.
+Multi-Head Attention consists of combining our linear transform step and the scaled dot-product attention step into a single function, this becomes a single head, and applying this function multiple times on the input embedded vector. We take the results from each head and simply concatentate them together, then pass the result through a final linear layer as shown in the following figure. The idea is that the multiple heads create a number of independently modelled word associations with different vector spaces for the $Q\:K\:V$ matrices, this could result in individual heads learning particular relationships such as pronouns to nouns (eg. Her hat) or noun to verb (eg. Door closes). The concatenated results are then put through another linear layer to finalise our multi-head attention
 
 ![Multi-Head Attention](../../assets/multihead-attention.png)
 
-In this example we use a loop to iterate over each individual head sequentially for simplicity.
+The following python is multihead attentition with 3 heads, and no mask or dropout using the attention function we defined earlier. In this example we use a loop to iterate over each individual head sequentially for simplicity, however in practice we would want to parallelise this.
+
+```python
+class Head(torch.nn.Module):
+  def __init__(self, input_embedding_size: int, hidden_size: int):
+    super().__init__() 
+    self.linear_transform_Q = torch.nn.Linear(input_embedding_size, hidden_size)
+    self.linear_transform_K = torch.nn.Linear(input_embedding_size, hidden_size)
+    self.linear_transform_V = torch.nn.Linear(input_embedding_size, hidden_size)
+
+  def forward(self, x: torch.Tensor) -> torch.Tensor:
+    Q = self.linear_transform_Q(embedded_sentence) # batch, sequence, hidden_size
+    K = self.linear_transform_K(embedded_sentence) # """
+    V = self.linear_transform_V(embedded_sentence) # """
+
+    output, _ = attention(Q, K, V)
+    return output
+
+input_embedding_size = 3
+hidden_size = 64
+heads = [Head(3, 64) for _ in range(3)]
+linear = torch.nn.Linear(input_embedding_size * hidden_size, input_embedding_size * hidden_size)
+mock_embedded_sentence = torch.randn(1, 3, input_embedding_size) # Batch, Sequence, Embedding
+
+concat = torch.cat([head(mock_embedded_sentence) for head in heads], dim=2) # batch, sequence, hidden_size * num_heads
+out = linear(concat)
+```
+
 
