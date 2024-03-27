@@ -1,5 +1,5 @@
 ---
-draft: true
+draft: false
 title: "Attention is All You Need"
 snippet: "This post is an interpretation of the paper \"Attention is All You Need\". The purpose is to extend on The Annotated Transformer by further reordering and simplification of the"
 publishDate: "2024-01-01 00:00"
@@ -156,23 +156,84 @@ class Head(torch.nn.Module):
     self.linear_transform_Q = torch.nn.Linear(input_embedding_size, hidden_size)
     self.linear_transform_K = torch.nn.Linear(input_embedding_size, hidden_size)
     self.linear_transform_V = torch.nn.Linear(input_embedding_size, hidden_size)
-
   def forward(self, x: torch.Tensor) -> torch.Tensor:
-    Q = self.linear_transform_Q(embedded_sentence) # batch, sequence, hidden_size
-    K = self.linear_transform_K(embedded_sentence) # """
-    V = self.linear_transform_V(embedded_sentence) # """
-
+    Q = self.linear_transform_Q(x) # batch, sequence, hidden_size
+    K = self.linear_transform_K(x) # """
+    V = self.linear_transform_V(x) # """
     output, _ = attention(Q, K, V)
     return output
 
+num_heads = 3
 input_embedding_size = 3
 hidden_size = 64
-heads = [Head(3, 64) for _ in range(3)]
-linear = torch.nn.Linear(input_embedding_size * hidden_size, input_embedding_size * hidden_size)
-mock_embedded_sentence = torch.randn(1, 3, input_embedding_size) # Batch, Sequence, Embedding
 
-concat = torch.cat([head(mock_embedded_sentence) for head in heads], dim=2) # batch, sequence, hidden_size * num_heads
-out = linear(concat)
+heads = [Head(input_embedding_size, hidden_size) for _ in range(num_heads)]
+fc_out = torch.nn.Linear(hidden_size * num_heads, input_embedding_size * num_heads)
+
+mock_embedded_sentence = torch.randn(1, 3, input_embedding_size * num_heads) # Batch, Sequence, Embedding * Number of Heads
+mock_embedded_sentence_split = torch.split(mock_embedded_sentence, num_heads, dim=2)
+
+out = []
+for i in range(num_heads):
+  out.append(heads[i](mock_embedded_sentence_split[i]))
+
+concat = torch.cat(out, dim=2) # batch, sequence, hidden_size * num_heads
+out = fc_out(concat)
 ```
+
+## Encoder
+
+To finish the encoder mechanism we will add the recurrent connections, layer normalization and linear layer as illustrated in the digram from the paper. (Note: the position embedding will be covered independently) We start by making the `EncoderTransformerBlock` which is what is contained within the main block of the follwoing diagram and then the `Encoder` which contains the six repeated transformer blocks.
+
+![Encoder Mechanism](../../assets/encoder.png)
+
+```python
+class EncoderTransformerBlock(torch.nn.Module):
+  def __init__(self, input_embedding_size: int, num_heads: int):
+    super().__init__()
+    self.num_heads = num_heads
+    # Multi-Head Attention
+    self.heads = [Head(input_embedding_size, hidden_size) for _ in range(num_heads)]
+    self.mha_fc_out = torch.nn.Linear(hidden_size * num_heads, input_embedding_size * num_heads)
+
+    # First Normalisation
+    self.norm1 = nn.LayerNorm(input_embedding_size * num_heads)
+
+    # Feed Forward
+    self.feed_foward = nn.Sequential(
+       nn.Linear(input_embedding_size * num_heads, input_embedding_size * num_heads * forward_expansion),
+       nn.ReLU(),
+       nn.Linear(input_embedding_size * num_heads * forward_expansion, input_embedding_size * num_heads)
+    )
+
+    # Second Normalisation
+    self.norm2 = nn.LayerNorm(input_embedding_size * num_heads)
+
+
+  def forward(x):
+    # Multi-Head Attention
+    split = torch.split(x, self.num_heads, dim=2)
+
+    out = []
+    for i in range(self.num_heads):
+      out.append(heads[i](split[i]))
+
+    out = torch.cat(out, dim=2) # batch, sequence, hidden_size * num_heads
+    out = fc_out(out)
+
+    # First Normalisation
+    x = self.norm1(out + x)
+
+    # Feed Forward
+    ff = self.feed_forward(x)
+
+    # Second Normalization
+    x = self.norm2(ff + x)
+
+    return x
+```
+    
+
+
 
 

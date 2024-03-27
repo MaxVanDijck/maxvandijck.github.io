@@ -22,7 +22,7 @@
     "@iconify-json/simple-icons": "^1.1.97",
     "@tailwindcss/typography": "^0.5.10",
     "astro": "^3.5.5",
-    "astro-icon": "latest",
+    "astro-icon": "^1.1.0",
     "astro-navbar": "^2.3.0",
     "astro-seo": "^0.8.0",
     "katex": "^0.16.9",
