@@ -183,7 +183,7 @@ out = fc_out(concat)
 
 ## Encoder
 
-To finish the encoder mechanism we will add the recurrent connections, layer normalization and linear layer as illustrated in the digram from the paper. (Note: the position embedding will be covered independently) We start by making the `EncoderTransformerBlock` which is what is contained within the main block of the follwoing diagram and then the `Encoder` which contains the six repeated transformer blocks.
+To finish the encoder mechanism we will add the recurrent connections, layer normalization and linear layer as illustrated in the digram from the paper. (Note: the position embedding will be covered independently) We start by making the `EncoderTransformerBlock` which is what is contained within the main block of the following diagram and then the `Encoder` which contains the six repeated transformer blocks.
 
 ![Encoder Mechanism](../../assets/encoder.png)
 
@@ -192,17 +192,21 @@ class EncoderTransformerBlock(torch.nn.Module):
   def __init__(self, input_embedding_size: int, num_heads: int, hidden_size: int, forward_expansion: int):
     super().__init__()
     self.num_heads = num_heads
+
     # Multi-Head Attention
     self.heads = [Head(input_embedding_size, hidden_size) for _ in range(num_heads)]
     self.mha_fc_out = torch.nn.Linear(hidden_size * num_heads, input_embedding_size * num_heads)
+
     # First Normalisation
     self.norm1 = nn.LayerNorm(input_embedding_size * num_heads)
+
     # Feed Forward
     self.feed_forward = nn.Sequential(
        nn.Linear(input_embedding_size * num_heads, input_embedding_size * num_heads * forward_expansion),
        nn.ReLU(),
        nn.Linear(input_embedding_size * num_heads * forward_expansion, input_embedding_size * num_heads)
     )
+
     # Second Normalisation
     self.norm2 = nn.LayerNorm(input_embedding_size * num_heads)
   def forward(self, x):
@@ -213,21 +217,45 @@ class EncoderTransformerBlock(torch.nn.Module):
       out.append(heads[i](split[i]))
     out = torch.cat(out, dim=2) # batch, sequence, hidden_size * num_heads
     out = fc_out(out)
+
     # First Normalisation
     x = self.norm1(out + x) # Recurrent
+
     # Feed Forward
     ff = self.feed_forward(x)
+
     # Second Normalization
     x = self.norm2(ff + x) # Recurrent
     return x
 
-encoder = EncoderTransformerBlock(3, 3, 64, 4)
-input = torch.randn(1, 3, 9)
+input_embedding_size = 3
+num_heads = 3
+hidden_size = 64
+forward_expansion = 4
+sequence_length = 3
+
+encoder = EncoderTransformerBlock(
+  input_embedding_size, 
+  num_heads, 
+  hidden_size, 
+  forward_expansion
+)
+
+input = torch.randn(1, sequence_length, input_embedding_size * num_heads)
 output = encoder(input)
-output.shape # torch.Size([1, 3, 9])
+output.shape # torch.Size([1, 3, 9]) (same as input size)
 ```
     
+We can then easily repeat this block multiple times (in the paper, six) to complete our encoder, eg.
 
-
-
+```python
+encoder = nn.Sequential(*[
+  EncoderTransformerBlock(
+    input_embedding_size, 
+    num_heads, 
+    hidden_size, 
+    forward_expansion
+  ) 
+for _ in range(6)])
+```
 
