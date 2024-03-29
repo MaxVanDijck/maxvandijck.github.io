@@ -72,11 +72,9 @@ def attention(
     query_embedding_len = query.size(-1) # same as embedding hidden size (64 in example)
     key = key.transpose(-2, -1) # batch, embedding_size, sequence
     attention_scores = query @ key / math.sqrt(query_embedding_len) # batch, sequence_length, attention_scores
-    if mask:
-        attention_scores = attention_scores.masked_fill(mask == 0, -1e9)
+
     attention_scores = attention_scores.softmax(dim=-1)
-    if dropout:
-        attention_scores = dropout(attention_scores)
+
     return attention_scores @ value, attention_scores
 ```
 
@@ -257,5 +255,39 @@ encoder = nn.Sequential(*[
     forward_expansion
   ) 
 for _ in range(6)])
+```
+
+## The Decoder & Masking
+
+Until now, we have ignored a bit of an issue in our transformer architecture which would be detrimental for model training and inference. Right now our model can see tokens in the future when training. This creates an effect where the models predictions are biased since it can already see output in the future. Take a simple example, `["I", "keep", "ice-cream", "in", "my", "freezer"]. Currently while accessing the `Value` matrix with our attention scores we are allowing the model to include weighting from future tokens in the resulting embedding. This means when training to predict the word "ice-cream" the model is given the additional context "in my freezer" when computing probabilities. However as a generative model at inference time we will not have reliable future tokens predicted yet, this means a models output may utilize its own predicted future values in its internal states to generate subsequent tokens. This can lead to a compounding error effect where inaccuracies in predicting future tokens can propagate and amplify errors in subsequent token predictions.
+
+To solve this, for each prediction we apply a mask so the model can only see the current token, and the tokens leading up to it which in turn reduces the error from incorporating future information prematurely. This helps enforce *causality* / makes the model *causal* which is a common term thrown around in sequence and timeseries problems which in simple terms is that predictions that happen are based solely on preceding information, ensuring that each prediction is influenced only by the data available up to that point in the sequence.
+
+![masking](../../assets/masking-words.png)
+
+Remember the masking is done on the attention scores so the sentences at the top of the diagram is the model's internal state *not* the labels directly. Taking our previous attention function we can now add our mask. We will also add our dropout layer to aid regularization for preventing model overfitting. This completes our scaled dot-product attention function.
+
+
+```diff
+def attention(
+      query: torch.Tensor, 
+      key: torch.Tensor, 
+      value: torch.Tensor, 
+      mask: torch.Tensor | None = None, 
+      dropout: torch.nn.Module | None = None
+    ):
+    query_embedding_len = query.size(-1) # same as embedding hidden size (64 in example)
+    key = key.transpose(-2, -1) # batch, embedding_size, sequence
+    attention_scores = query @ key / math.sqrt(query_embedding_len) # batch, sequence_length, attention_scores
+
++   if mask is not None:
++       scores = scores.masked_fill(mask == 0, -1e9)
+
+    attention_scores = attention_scores.softmax(dim=-1)
+
++   if dropout is not None:
++       attention_scores = dropout(p_attn)
+
+    return attention_scores @ value, attention_scores
 ```
 
