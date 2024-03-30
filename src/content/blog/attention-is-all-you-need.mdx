@@ -1,5 +1,5 @@
 ---
-draft: true
+draft: false
 title: "Attention is All You Need"
 snippet: "This post is an interpretation of the paper \"Attention is All You Need\". The purpose is to extend on The Annotated Transformer by further reordering and simplification of the"
 publishDate: "2024-01-01 00:00"
@@ -145,7 +145,7 @@ Multi-Head Attention consists of combining our linear transform step and the sca
 
 ![Multi-Head Attention](../../assets/multihead-attention.png)
 
-The following python is multihead attentition with 3 heads, and no mask or dropout using the attention function we defined earlier. In this example we use a loop to iterate over each individual head sequentially for simplicity, however in practice we would want to parallelise this.
+The following python is multihead attentition with 3 heads, and no mask or dropout using the attention function we defined earlier. In this example we use a loop to iterate over each individual head sequentially for simplicity, however in practice we would want to parallelise this. Note that we are using the same tensor for the query, key and value, this will change later when we address the decoder but we will code the `Head` to work in both cases.
 
 ```python
 class Head(torch.nn.Module):
@@ -154,7 +154,7 @@ class Head(torch.nn.Module):
     self.linear_transform_Q = torch.nn.Linear(input_embedding_size, hidden_size)
     self.linear_transform_K = torch.nn.Linear(input_embedding_size, hidden_size)
     self.linear_transform_V = torch.nn.Linear(input_embedding_size, hidden_size)
-  def forward(self, x: torch.Tensor) -> torch.Tensor:
+  def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor) -> torch.Tensor:
     Q = self.linear_transform_Q(x) # batch, sequence, hidden_size
     K = self.linear_transform_K(x) # """
     V = self.linear_transform_V(x) # """
@@ -173,7 +173,8 @@ mock_embedded_sentence_split = torch.split(mock_embedded_sentence, num_heads, di
 
 out = []
 for i in range(num_heads):
-  out.append(heads[i](mock_embedded_sentence_split[i]))
+  input = mock_embedded_sentence_split[i]
+  out.append(heads[i](input, input, input))
 
 concat = torch.cat(out, dim=2) # batch, sequence, hidden_size * num_heads
 out = fc_out(concat)
@@ -186,7 +187,7 @@ To finish the encoder mechanism we will add the recurrent connections, layer nor
 ![Encoder Mechanism](../../assets/encoder.png)
 
 ```python
-class EncoderTransformerBlock(torch.nn.Module):
+class EncoderBlock(torch.nn.Module):
   def __init__(self, input_embedding_size: int, num_heads: int, hidden_size: int, forward_expansion: int):
     super().__init__()
     self.num_heads = num_heads
@@ -212,7 +213,8 @@ class EncoderTransformerBlock(torch.nn.Module):
     split = torch.split(x, self.num_heads, dim=2)
     out = []
     for i in range(self.num_heads):
-      out.append(heads[i](split[i]))
+      input = split[i]
+      out.append(heads[i](input, input, input))
     out = torch.cat(out, dim=2) # batch, sequence, hidden_size * num_heads
     out = fc_out(out)
 
@@ -232,7 +234,7 @@ hidden_size = 64
 forward_expansion = 4
 sequence_length = 3
 
-encoder = EncoderTransformerBlock(
+encoder = EncoderBlock(
   input_embedding_size, 
   num_heads, 
   hidden_size, 
@@ -248,7 +250,7 @@ We can then easily repeat this block multiple times (in the paper, six) to compl
 
 ```python
 encoder = nn.Sequential(*[
-  EncoderTransformerBlock(
+  EncoderBlock(
     input_embedding_size, 
     num_heads, 
     hidden_size, 
@@ -265,8 +267,7 @@ To solve this, for each prediction we apply a mask so the model can only see the
 
 ![masking](../../assets/masking-words.png)
 
-Remember the masking is done on the attention scores so the sentences at the top of the diagram is the model's internal state *not* the labels directly. Taking our previous attention function we can now add our mask. We will also add our dropout layer to aid regularization for preventing model overfitting. This completes our scaled dot-product attention function.
-
+Remember the masking is done on the attention scores so the sentences at the top of the diagram is the model's internal state *not* the labels directly. Taking our previous attention function we can now add our mask. We will also add our dropout layer to aid regularization for preventing model overfitting. This completes our scaled dot-product attention function. We update the `Head` class to utilise these values
 
 ```diff
 def attention(
@@ -289,5 +290,125 @@ def attention(
 +       attention_scores = dropout(p_attn)
 
     return attention_scores @ value, attention_scores
+
+
+class Head(torch.nn.Module):
+  def __init__(self, input_embedding_size: int, hidden_size: int):
+    super().__init__() 
+    self.linear_transform_Q = torch.nn.Linear(input_embedding_size, hidden_size)
+    self.linear_transform_K = torch.nn.Linear(input_embedding_size, hidden_size)
+    self.linear_transform_V = torch.nn.Linear(input_embedding_size, hidden_size)
+- def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor) -> torch.Tensor:
++ def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, mask: torch.Tensor | None = None, dropout: torch.nn.Module | None = None) -> torch.Tensor:
+    Q = self.linear_transform_Q(x) # batch, sequence, hidden_size
+    K = self.linear_transform_K(x) # """
+    V = self.linear_transform_V(x) # """
+-   output, _ = attention(Q, K, V)
++   output, _ = attention(Q, K, V, mask, dropout)
+    return output
 ```
+
+and create a new function to generate the mask
+```python
+def mask(size):
+    attn_shape = (1, size, size)
+    mask = torch.triu(torch.ones(attn_shape), diagonal=1).type(
+        torch.uint8
+    )
+    return mask == 0
+
+mask(3)
+# Output:
+# torch.Tensor([[[True, False, False],
+#                [True,  True, False],
+#                [True,  True,  True]]])
+```
+
+With our attention function now containing masking functionality we can create the decoder block. This block is very similar to the encoder, however we add an additional multi-head attention layer which utilises the masking and in the second attention layer we will use the query matrix from the masked attention layer with the key and value matrices from the encoder. This means we will be using a query which has been masked and will only contain information up to the preceding token thus only allowing information from previous positions in the sequence to influence the generation of each subsequent token, preserving the causal nature of the decoder's predictions.
+
+```python
+class DecoderBlock(nn.Module):
+  def __init__(self, input_embedding_size: int, num_heads: int, hidden_size: int, forward_expansion: int):
+    super().__init__()
+    self.num_heads = num_heads
+
+    # Masked Multi-Head Attention
+    self.masked_head = [Head(input_embedding_size, hidden_size) for _ in range(num_heads)]
+    self.masked_mha_fc_out = torch.nn.Linear(hidden_size * num_heads, input_embedding_size * num_heads)
+
+    # First Normalisation
+    self.norm1 = nn.LayerNorm(input_embedding_size * num_heads)
+
+
+    # Multi-Head Attention with Encoder's output as Key + Value
+    self.unmasked_head = [Head(input_embedding_size, hidden_size) for _ in range(num_heads)]
+    self.unmasked_mha_fc_out = torch.nn.Linear(hidden_size * num_heads, input_embedding_size * num_heads)
+
+    # Second Normalisation
+    self.norm2 = nn.LayerNorm(input_embedding_size * num_heads)
+
+    # Feed Forward
+    self.feed_forward = nn.Sequential(
+       nn.Linear(input_embedding_size * num_heads, input_embedding_size * num_heads * forward_expansion),
+       nn.ReLU(),
+       nn.Linear(input_embedding_size * num_heads * forward_expansion, input_embedding_size * num_heads)
+    )
+
+    # Third Normalisation
+    self.norm3 = nn.LayerNorm(input_embedding_size * num_heads)
+
+  def forward(self, x, encoder_out, mask):
+    # Masked Multi-Head Attention
+    split = torch.split(x, self.num_heads, dim=2)
+    out = []
+    for i in range(self.num_heads):
+      input = split[i]
+      out.append(self.masked_heads[i](input, input, input))
+    out = torch.cat(out, dim=2) # batch, sequence, hidden_size * num_heads
+    out = self.masked_mha_fc_out(out)
+
+    # First Normalisation
+    x = self.norm1(out + x) # Recurrent
+
+
+    # Multi-Head Attention with Encoder's output as Key + Value
+    split = torch.split(x, self.num_heads, dim=2)
+    split_encoder_output = torch.split(encoder_output, self.num_heads, dim=2)
+    out = []
+    for i in range(self.num_heads):
+      input = split[i]
+      input_encoder = split_encoder_output[i]
+      out.append(self.masked_heads[i](input, input_encoder, input_encoder))
+    out = torch.cat(out, dim=2) # batch, sequence, hidden_size * num_heads
+    out = self.unmasked_mha_fc_out(out)
+
+    # Second Normalisation
+    x = self.norm2(out + x) # Recurrent
+
+    # Feed Forward
+    ff = self.feed_forward(x)
+
+    # Third Normalization
+    x = self.norm3(ff + x) # Recurrent
+    return x
+```
+
+Thus creating our decoder as:
+
+```python
+decoder = nn.Sequential(*[
+  DecoderBlock(
+    input_embedding_size, 
+    num_heads, 
+    hidden_size, 
+    forward_expansion
+  ) 
+for _ in range(6)])
+```
+
+## Positional Encoding
+
+The remaining puzzle piece for our transformer model is the positional encoder. Currently the model has no method of telling which order the tokens appear. This means that for an individual token we there is no method for the model to know if the other tokens are within a few words or thousands of words worth of distance. This distance needs to somehow be communicated through to the model. To do this, in the paper there is a sinusoidal embedding added to the input embeddings.
+
+
 
