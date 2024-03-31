@@ -1,5 +1,5 @@
 ---
-draft: false
+draft: true
 title: "Attention is All You Need"
 snippet: "This post is an interpretation of the paper \"Attention is All You Need\". The purpose is to extend on The Annotated Transformer by further reordering and simplification of the"
 publishDate: "2024-01-01 00:00"
@@ -408,7 +408,99 @@ for _ in range(6)])
 
 ## Positional Encoding
 
-The remaining puzzle piece for our transformer model is the positional encoder. Currently the model has no method of telling which order the tokens appear. This means that for an individual token we there is no method for the model to know if the other tokens are within a few words or thousands of words worth of distance. This distance needs to somehow be communicated through to the model. To do this, in the paper there is a sinusoidal embedding added to the input embeddings.
+The remaining puzzle piece for our transformer model is the positional encoder. Currently the model has no method of telling which order the tokens appear. This means that for an individual token we there is no method for the model to know if the other tokens are within a few words or thousands of words worth of distance. This distance needs to somehow be communicated through to the model. To do this, in the paper there is a sinusoidal embedding added to the input embeddings. Adding these sinusoidal embeddings to the word embeddings pushes tokens in close proximity to each other towards a more similar vector space, if we recall back to our dot-product usage in our attention mechanism we will in turn recognise that this will promote higher attention scores between these tokens. The positional encoding used in the paper consists of sin and cosine functions of different frequencies where $i$ is the index of the dimension of the positional encoding
+
+$PE(pos,2i) = sin(\frac{pos}{10000^{2i/dmodel}})$
+
+$PE(pos,2i + 1) = cos(\frac{pos}{10000^{2i/dmodel}})$
+ 
+And in python, to calculate the positional encoding for a single position
+
+```python
+def positional_encoding(position, d_model):
+  pos_encoding = np.zeros((1, d_model))
+  for i in range(d_model):
+    if i % 2 == 0:
+      pos_encoding[:, i] = np.sin(position / (10000 ** (i * 2 / d_model)))
+    else:
+      pos_encoding[:, i] = np.cos(position / (10000 ** ((i-1) * 2 / d_model)))
+  return pos_encoding
+
+# The first token in with an embedding size of 8
+positional_encoding(0, 8) # [   0,    1,     0,    1, 0, 1, 0, 1]
+positional_encoding(1, 8) # [0.84, 0.54, 0.009, 0.99, 0, 1, 0, 1]
+
+# Positions 0, 1 have quite similar vectors
+...
+
+To do this vectorised we compute a constant matrix that we add in the forward step
+
+```python
+class PositionalEncoder(nn.Module):
+  def __init__(self, d_model, max_len=3): # max len is 3 for example (d_model = embedding_size)
+    super().__init__()
+    positional_encoding = torch.zeros(max_len, d_model) # sequence_length, encoding_length
+    position = torch.arange(0, max_len).unsqueeze(1) # sequence_length
+    div_term = torch.exp(
+        torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model)
+    ) # encoding_length
+    positional_encoding[:, 0::2] = torch.sin(position * div_term) # fill values for even positions
+    positional_encoding[:, 1::2] = torch.cos(position * div_term) # fill values for odd positions
+    positional_encoding = positional_encoding.unsqueeze(0) # add batch dimension
+    self.register_buffer("positional_encoding", positional_encoding)
+
+  def forward(self, x):
+    x = x + self.postitional_encoding[:, : x.size(1)].requires_grad_(False)
+    return x
+
+positional_encoder = PositionalEncoder(3)
+```
+
+## Assembling the Transformer
+
+Now that we have all our necessary components explained and built, we can finally assemble our transformer model. We have our embedding layers for the input and the target sentence. We then add the positional encoding to each of these. We then pass the input sequence to the encoder then pass the target sentence along with the encoder output to the decoder. Finally we pass the output from the decoder through a llinear layer and a softmax to predict the output at each point in the output sequence.
+
+```python
+class Transformer(nn.Module):
+  def __init__(self):
+    super().__init__()
+
+    # Basic Config
+    vocabulary_size = 3
+    embedding_size = 3
+    num_heads = 6
+    hidden_size = 64
+    forward_expansion = 4
+
+    self.input_embedding = torch.nn.Embedding(vocabulary_size, embedding_size)
+    self.target_embedding = torch.nn.Embedding(vocabulary_size, embedding_size)
+
+    self.positional_encoder = PositionalEncoder(embedding_size)
+
+    self.encoder = nn.Sequential(*[
+      EncoderBlock(
+        embedding_size, 
+        num_heads, 
+        hidden_size, 
+        forward_expansion
+      ) 
+    for _ in range(6)])
+
+    self.decoder = nn.Sequential(*[
+      DecoderBlock(
+        embedding_size, 
+        num_heads, 
+        hidden_size, 
+        forward_expansion
+      ) 
+    for _ in range(6)])
+
+    self.linear = nn.Linear(embedding_size
+    self.softmax = nn.Softmax()
+
+```
+
+
 
 
 
