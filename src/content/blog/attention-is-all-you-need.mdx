@@ -4,17 +4,17 @@ title: "Attention is All You Need"
 snippet: "This post is an interpretation of the paper \"Attention is All You Need\". The purpose is to extend on The Annotated Transformer by further reordering and simplification of the"
 publishDate: "2024-01-01 00:00"
 image: {
-  src: "https://images.unsplash.com/photo-1542393545-10f5cde2c810?&fit=crop&w=430&h=240",
-  alt: "typography"
+  src: '/attention is all you need.png',
+  alt: "attention is all you need"
 }
-category: "Data Science"
+category: "Deep Learning"
 author: "Max van Dijck"
-tags: [AI, datascience]
+tags: [AI, datascience, deeplearning]
 ---
 
-This post is an interpretation of the paper "Attention is All You Need". The purpose is to extend on [The Annotated Transformer](https://nlp.seas.harvard.edu/annotated-transformer/)
-by further reordering and simplification of the paper. The motivation behind this is to increase clarity by starting with our input tensors and working through the model layer by layer rather
-than starting at a point already deep in the weeds (at the encoder). Rather, we will build up to that point by starting at an input sentence, tokenizing and then creating the $Q\:K\:V$ or query, key and value matrices. Since this paper is a common starting point for those learning about the transformer architecture we try to make this post as approachable as possible and easy to understand without large amounts of prior context or knowledge.
+This post is an interpretation of the paper "Attention is All You Need". The purpose is to focus on the architecture outlined in the accompanin article [The Annotated Transformer](https://nlp.seas.harvard.edu/annotated-transformer/)
+through further reordering and simplification. The motivation behind this is to increase clarity by starting with our input tensors and working through the model layer by layer rather
+than starting at a point already deep in the weeds (at the encoder). Rather, we will build up to that point by starting at an input sentence, tokenizing and then creating the $Q\:K\:V$ or query, key and value matrices. We then build the scaled dot-product attention mechanism before addressing the encoder and decoder. Since this paper is a common starting point for those learning about the transformer architecture we try to make this post as approachable as possible and easy to understand without large amounts of prior context or knowledge.
 
 ## Tokenisation, Embedding and Linear Transformation
 
@@ -458,7 +458,7 @@ positional_encoder = PositionalEncoder(3)
 
 ## Assembling the Transformer
 
-Now that we have all our necessary components explained and built, we can finally assemble our transformer model. We have our embedding layers for the input and the target sentence. We then add the positional encoding to each of these. We then pass the input sequence to the encoder then pass the target sentence along with the encoder output to the decoder. Finally we pass the output from the decoder through a llinear layer and a softmax to predict the output at each point in the output sequence.
+Now that we have all our necessary components explained and built, we can finally assemble our transformer model. We have our embedding layers for the input and the target sentence. We then add the positional encoding to each of these. We then pass the input sequence to the encoder then pass the target sentence along with the encoder output to the decoder. Finally we pass the output from the decoder through a llinear layer and a softmax to predict the output at each point in the output sequence. Keep in mind, for simplicity we force a sequence length of three so we do not need to mask the input tensor, however in practice we would have to use a mask to be able to concatenate examples into batches. Without this masking of the inputs the model would be able to pay attention to empty tokens which would negatively affect training.
 
 ```python
 class Transformer(nn.Module):
@@ -471,6 +471,7 @@ class Transformer(nn.Module):
     num_heads = 6
     hidden_size = 64
     forward_expansion = 4
+    sequence_length = 3
 
     self.input_embedding = torch.nn.Embedding(vocabulary_size, embedding_size)
     self.target_embedding = torch.nn.Embedding(vocabulary_size, embedding_size)
@@ -498,9 +499,24 @@ class Transformer(nn.Module):
     self.linear = nn.Linear(embedding_size
     self.softmax = nn.Softmax()
 
+    self.mask = mask(sequence_length)
+
+
+  def forward(self, input, target):
+    input = self.positional_encoder(self.input_embedding(input))
+    target = self.positional_encoder(self.target_embedding(target))
+
+    encoder_output = self.encoder(input) 
+    decoder_output = self.decoder(target, encoder_output, self.mask)
+
+    x = self.linear(decoder_output)
+    x = self.softmax(x)
+
+    return x
 ```
 
+## Closing remarks
 
+We hope this blog post has been beneficial in your understanding of the transformer architecture. Please reach out with any issues or feedback.
 
-
-
+Thank you, Max van Dijck
