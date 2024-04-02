@@ -12,19 +12,18 @@ author: "Max van Dijck"
 tags: [AI, datascience, deeplearning]
 ---
 
-This post is an interpretation of the paper "Attention is All You Need". The purpose is to focus on the architecture outlined in the accompanin article [The Annotated Transformer](https://nlp.seas.harvard.edu/annotated-transformer/)
-through further reordering and simplification. The motivation behind this is to increase clarity by starting with our input tensors and working through the model layer by layer rather
-than starting at a point already deep in the weeds (at the encoder). Rather, we will build up to that point by starting at an input sentence, tokenizing and then creating the $Q\:K\:V$ or query, key and value matrices. We then build the scaled dot-product attention mechanism before addressing the encoder and decoder. Since this paper is a common starting point for those learning about the transformer architecture we try to make this post as approachable as possible and easy to understand without large amounts of prior context or knowledge.
+This post offers an interpretation of the paper "Attention is All You Need". The purpose is to focus on the architecture explained in the article [The Annotated Transformer](https://nlp.seas.harvard.edu/annotated-transformer/)
+through further reordering and simplification of the PyTorch implementation. The motivation behind this effort is to provide further clarity by starting with the input tensors and working through the model layer by layer rather than starting at a point which is already deep in the weeds (at the encoder). Rather, we will build up to that point by starting at an input sentence, tokenizing and then creating the query, key and value matrices denoted as $Q\:K\:V$. Subsequently, we construct the scaled dot-product attention mechanism before addressing the encoder and decoder. Given this paper serves as a common starting point for those learning about the transformer architecture our objective is to make this post as accessible as possible and easy to understand without large amounts of prior context or knowledge.
 
 ## Tokenisation, Embedding and Linear Transformation
 
-To get started at the very input of the transformer, let's assume a simple sentence and create an example tokenization for the sentence. Normally we would use a [tokenizer](https://platform.openai.com/tokenizer) but we will skip this for the sake of simplicity, the short explanation is that a tokenizer groups relevant neighboring characters together from a given string and converts them into a numerical representation so that they can be used as an input to a neural network. Here is our tensor, we include the batch dimension as to best reflect what happens in a built out example:
+To get started at the very input of the transformer, let's consider a simple sentence and an example tokenization for the sentence. While typically we would use a [tokenizer](https://platform.openai.com/tokenizer) for the sake of simplicity as we want to focus on the transformer architecture, we will forgo the implementation. However, a brief explanation of the tokenizer is warranted here: a tokenizer groups relevant neighboring characters together from a given string and converts them into a numerical representation so that they can be used as an input to a neural network. Outlined below is our tensor. We include the batch dimension as to best reflect what happens in a fully developed system:
 ```python
 sentence = ["our", "input", "sentence"]
 input_tokens = torch.tensor([[0, 1, 2]]) # Batch, Sequence
 ```
 
-Now we can create the embedding layer of our network. An embedding layer stores a mapping from a vocabulary of tokens to a n-dimensional vector space. In our case we use a vocabulary size of three and an embedding size of three since we are only training on this simple example. However, a typical large language model (LLM) would have a vocabulary size in the tens of thousands and embedding size in the thousands. Now if we pass our tensor to the embedding layer we will get an output of shape: Batch, Sequence, Embedding. Viewing the tensor after the embedding we can see each token in our sequence has been mapped to vector space, each being represented by an embedding of three values.
+Now we can establish the embedding layer of our network. An embedding layer stores a mapping from a vocabulary of tokens to an n-dimensional vector space. In our case we use a vocabulary size of three and an embedding size of three since we are only working with this simple example. However, a typical large language model (LLM) would have a vocabulary size in the tens of thousands and embedding size in the thousands. When passing our tensor to the embedding layer we will get an output of shape: Batch, Sequence, Embedding. Upon examining the tensor after the embedding layer we can see each token in our sequence has been mapped to vector space, with each being represented by an embedding of three values.
 
 ```python
 vocabulary_size = 3
@@ -40,7 +39,7 @@ embedded_sentence
             grad_fn=<EmbeddingBackward0>)
 ```
 
-Given our embedded vector, we can now create our $Q\:K\:V$ matrices used in the attention mechanism mentioned in the paper. We do this by taking our embedded sentence and feeding it into three seperate fully connected layers to obtain the query, key and value matrices
+Given our embedded vector, we can now create our $Q\:K\:V$ matrices used in the attention mechanism mentioned in the paper. This is achieved by passing our embedding sentence and feeding it into three seperate fully connected layers to derive the query, key and value matrices.
 
 ```python
 hidden_size = 64  
