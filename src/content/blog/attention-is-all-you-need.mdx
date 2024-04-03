@@ -54,7 +54,7 @@ V = linear_transform_V(embedded_sentence) # """
 
 ## Scaled Dot-product Attention
 
-With our $Q\:K\:V$ matrices we will now perform the scaled dot-product attention introduced in the paper. We take the query matrix and multiply it by the transposed key matrix. Then we divide the resulting matrix by the square root length of the transformed embeddings $\sqrt{d_{k}}$, which is equal to the square-root of the linear transform's hidden size, in our case 64 -> 8. After this division step the output is optionally masked and put through a softmax function. Then dropout is applied and finally multiplied by the value matrix. The equation shown in the paper is the following (which excludes detailing the mask and dropout which we will get into, along with the purpose of the query, key and value matrices and the intuition behind them.
+Utilizing our $Q\:K\:V$ matrices, we can now address the scaled dot-product attention introduced in the paper. First, the query matrix is mutliplied by the transposed key matrix. Then we divide the resulting matrix by the square root of the transformed embeddings length $\sqrt{d_{k}}$, which is equal to the square-root of the linear transform's hidden size, in our case 64 -> 8. After this division step the output is optionally masked and put through a softmax function. Then dropout is applied and finally multiplied by the value matrix. The equation shown in the paper is the following, note that we exclude detailing the mask and dropout which we will address later in this article, along with the purpose of the query, key and value matrices and the intuition behind them.
 
 $Attention(Q, K, V) = softmax(\frac{QK^{T}}{\sqrt{d_{k}}})V $
 
@@ -77,9 +77,9 @@ def attention(
     return attention_scores @ value, attention_scores
 ```
 
-### Query, Key, Value
+### Query, Key and Value
 
-Now, we're familiar with a basic dictionary/hashmap which works to map from an exact key to a specific value
+Now, we're familiar with a basic dictionary/hashmap which works by mapping from an exact key to a specific value. Given a specific query we can obtain the associated value.
 
 ```python
 d = {
@@ -90,19 +90,19 @@ d = {
 d["fun"] # 10
 ```
 
-However, we want to do a lookup based on the meaning of the word and return a vector containing how likely it is that each key in our lookup table is likely related to our query, or rather how much *attention* we want to pay to each value based on the query. So for example, let's take the word "positive" and assume that we have a 45% match for both "fun" and "exciting" and only a 10% match for "boring".
+However, we want to do a lookup based on the meaning of the word and return a vector containing how likely it is that each key in our lookup table is related to our query, or rather how much *attention* we want to pay to each value based on the query. So for example, let's take the word "rollercoaster" and assume that we have a 45% match for both "fun" and "exciting" and only a 10% match for "boring".
 
 ```python
 query = "rollercoaster"
 0.45 * d["fun"] + 0.45 * d["exciting"] + 0.1 * d["boring"] # 5.65
 ```
 
-In this example, I've created the attention scores based upon how relevant I interpret each key to the query "rollercoaster". So how does a model internally arrive at these attention scores? Now if we think back to the previous section we will be reminded that our query and key matrices have the dimensions Sequence and Embedding (plus batch as the first dimension, which we don't really need to worry about). The embedding is the crucial part here and having an understanding of how dot products work in relation to the similarity between two vectors helps. The key ideas are as follows
+In this example, we have manually created the attention scores based upon how relevant we interpret each key to the query "rollercoaster". However, how would a model internally arrive at these attention scores? Now if we think back to the previous section we will be reminded that our query and key matrices have the Sequence and Embedding dimensions. The embedding is the significant factor here and having an understanding of how dot products work in relation to the similarity between two vectors helps. However a basic understanding will suffice and the following key ideas are enough to provide intuition into why we use the dot product operation.
 - If two vectors are in the same direction their dot product is at it's largest $n > 0$
 - If two vectors are in the opposite direction their dot product is at it's smallest $n < 0$
-- If two vectors are perpindicular their dot product will be zero $n = 0$
+- If two vectors are perpendicular their dot product will be zero $n = 0$
 
-So when we have two *word embeddings*, our query vector's word embedding and our key vector's word embedding, and we take the dot product we get a measure of how relevant the key is in relation to the query based on how similar the two are in vector space. We've created a [desmos visualization](https://www.desmos.com/calculator/b7xvrosoyp) with two vectors and their resulting dot product to demonstrate this behaviour. This similarity is called the attention score. What's happened is that our query embedding is a vector that when mapped into the vector space of the key, is surrounded by tokens that are most relevant to pay attention to. If we change our keys into vectors where our hash-function is now similar to $query \cdot value$ we now get something that looks a bit like this:
+So when we have two word embeddings, our query's word embedding and our key's word embedding. When we perform a dot product operation we get a measure of how relevant the key is in relation to the query based on how similar the two are in vector space. To support this we've created a [desmos visualization](https://www.desmos.com/calculator/b7xvrosoyp) with two vectors and their resulting dot product to demonstrate this behaviour. The resulting similarity is called the attention score. What's happened is that our query embedding is a vector that when mapped into the vector space of the key embedding, is surrounded by tokens that are most relevant to pay attention to. If we change our keys into vectors where our hash-function is now similar to $query \cdot value$ we get an operation which looks like this.
 
 ```python
 query = [8, -5]
@@ -114,18 +114,18 @@ d = {
 attention_scores = [8*5 + -5*-3, 8*6 + -5*-1, 8*-4 + -5*8] # [55, 53, -72]
 ```
 
-As you can see if our query embedding is close within the key vector space to the "fun" and "exciting" keys it results in a high attention to these values and opposite to the "boring" key resulting in a low attention score. 
+As you can see if our query embedding is close within the key embedding vector space to the "fun" and "exciting" keys it results in a high attention to these values and opposite to the "boring" key resulting in a low attention score. The following diagram shows the above operation's query and keys in vector space.
 
 ![Vector space](../../assets/vector-space.png)
 
-Translating our dictionary example in our pytorch code this is what is happening in the following
+Translating our dictionary example in our PyTorch code this is what is happening in the following snippet.
 
 ```python
 key = key.transpose(-2, -1)
 attention_scores = query @ key
 ```
 
-Following this, the attention scores are then divided by the square-root of the embedding length and put through a softmax function. As the embedding length grows in size the resultant dot products can get quite large in magnitude which would make the output values from the softmax extremely close to 0 and 1 which may cause vanishing gradients. This problem is why we scale the attention scores (henced *scaled* dot product attention). And now we multiply our attention scores with the values to create a matrix where each element of the sequence contains a new vector embedding that is a weighted combination of the orignal value matrix's embedding for each work by the attention scores for that particular token.
+Following this, the attention scores are then divided by the square-root of the embedding length and then passed through a softmax function. As the embedding length grows in size, the resultant dot products can become large in magnitude, potentially causing the output values from the softmax to be extremely close to 0 and 1. This in turn may lead to vanishing gradients. This issue is why we scale the attention scores (henced *scaled* dot product attention). Now, we multiply our attention scores with the values to create a matrix where each element of the sequence contains a new vector embedding that is a weighted combination of the orignal value matrix's embedding for each word by the attention scores for that particular token.
 
 ```diff
 + query_embedding_len = query.size(-1)
@@ -136,15 +136,15 @@ Following this, the attention scores are then divided by the square-root of the 
 + return attention_scores @ value, attention_scores
 ```
 
-Now we did skip the masking and dropout layer to focus on the explanation of the $Q\:K\:V$ matrices. Dropout is as expected used as a regularization method to prevent the transformer for overfitting. The masking is used in the decoder stack to prevent current predictions from referencing tokens in the future which could result in incorrect sequence generation. We will dive deeper into this when we address the decoder stack.
+We skipped the masking and dropout layer to focus on the explanation of the $Q\:K\:V$ matrices. Dropout is used as expected as a regularization method to prevent the transformer from overfitting. The masking is used in the decoder stack to prevent current predictions from referencing tokens in the future which could result in incorrect sequence generation. We will dive deeper into this when we address the decoder stack.
 
 ## Multi-Head Attention
 
-Multi-Head Attention consists of combining our linear transform step and the scaled dot-product attention step into a single function, this becomes a single head, and applying this function multiple times on the input embedded vector. We take the results from each head and simply concatentate them together, then pass the result through a final linear layer as shown in the following figure. The idea is that the multiple heads create a number of independently modelled word associations with different vector spaces for the $Q\:K\:V$ matrices, this could result in individual heads learning particular relationships such as pronouns to nouns (eg. Her hat) or noun to verb (eg. Door closes). The concatenated results are then put through another linear layer to finalise our multi-head attention
+Multi-Head Attention consists of combining our linear transform step and the scaled dot-product attention step into a single function. Together these operations become a single head. Subsequently, applying this function multiple times on the input embedded vector becomes multi-head attention. We take the results from each head and simply concatentate them together, then pass the result through a final linear layer as shown in the following figure. The idea is that the multiple heads create a number of independently modelled word associations with different vector spaces for the $Q\:K\:V$ matrices, this could result in individual heads learning particular relationships such as pronouns to nouns (eg. Her hat) or noun to verb (eg. Door closes). The concatenated results are then put through another linear layer to finalise our multi-head attention
 
 ![Multi-Head Attention](../../assets/multihead-attention.png)
 
-The following python is multihead attentition with 3 heads, and no mask or dropout using the attention function we defined earlier. In this example we use a loop to iterate over each individual head sequentially for simplicity, however in practice we would want to parallelise this. Note that we are using the same tensor for the query, key and value, this will change later when we address the decoder but we will code the `Head` to work in both cases.
+The following python snippet is multihead attention example with 3 heads, and no mask or dropout using the attention function we defined earlier. In this example we use a loop to iterate over each individual head sequentially for simplicity. However, in practice, we would want to parallelise this. Note that we are using the same tensor for the query, key and value, this implementation is correct for the Encoder but will change later in the Decoder. However we will code the `Head` to take in all three matrices such as it will work in both cases.
 
 ```python
 class Head(torch.nn.Module):
@@ -153,6 +153,7 @@ class Head(torch.nn.Module):
     self.linear_transform_Q = torch.nn.Linear(input_embedding_size, hidden_size)
     self.linear_transform_K = torch.nn.Linear(input_embedding_size, hidden_size)
     self.linear_transform_V = torch.nn.Linear(input_embedding_size, hidden_size)
+
   def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor) -> torch.Tensor:
     Q = self.linear_transform_Q(x) # batch, sequence, hidden_size
     K = self.linear_transform_K(x) # """
@@ -181,7 +182,7 @@ out = fc_out(concat)
 
 ## Encoder
 
-To finish the encoder mechanism we will add the recurrent connections, layer normalization and linear layer as illustrated in the digram from the paper. (Note: the position embedding will be covered independently) We start by making the `EncoderTransformerBlock` which is what is contained within the main block of the following diagram and then the `Encoder` which contains the six repeated transformer blocks.
+To finish the encoder mechanism we will add the recurrent connections, layer normalization and linear layer as illustrated in the digram from the paper (Note: the positional embedding will be covered independently). We start by making the `EncoderTransformerBlock` which is contained within the main block of the following diagram and then the `Encoder` which contains the six repeated transformer blocks.
 
 ![Encoder Mechanism](../../assets/encoder.png)
 
@@ -207,6 +208,7 @@ class EncoderBlock(torch.nn.Module):
 
     # Second Normalisation
     self.norm2 = nn.LayerNorm(input_embedding_size * num_heads)
+
   def forward(self, x):
     # Multi-Head Attention
     split = torch.split(x, self.num_heads, dim=2)
@@ -260,7 +262,7 @@ for _ in range(6)])
 
 ## The Decoder & Masking
 
-Until now, we have ignored a bit of an issue in our transformer architecture which would be detrimental for model training and inference. Right now our model can see tokens in the future when training. This creates an effect where the models predictions are biased since it can already see output in the future. Take a simple example, `["I", "keep", "ice-cream", "in", "my", "freezer"]. Currently while accessing the `Value` matrix with our attention scores we are allowing the model to include weighting from future tokens in the resulting embedding. This means when training to predict the word "ice-cream" the model is given the additional context "in my freezer" when computing probabilities. However as a generative model at inference time we will not have reliable future tokens predicted yet, this means a models output may utilize its own predicted future values in its internal states to generate subsequent tokens. This can lead to a compounding error effect where inaccuracies in predicting future tokens can propagate and amplify errors in subsequent token predictions.
+Until now, we have ignored a bit of an issue in our attention mechanism which would be detrimental for model training and inference. Right now our model can see tokens in the future when training. This creates an effect where the models predictions are biased since it can already see output in the future. Take a simple example, `["I", "keep", "ice-cream", "in", "my", "freezer"]. Currently while accessing the `Value` matrix with our attention scores we are allowing the model to include weighting from future tokens in the resulting embedding. This means when training to predict the word "ice-cream" the model is given the additional context "in my freezer" when computing probabilities. However as a generative model at inference time we will not have reliable future tokens predicted yet, this means a models output may utilize its own predicted future values in its internal states to generate subsequent tokens. This can lead to a compounding error effect where inaccuracies in predicting future tokens can propagate and amplify errors in subsequent token predictions.
 
 To solve this, for each prediction we apply a mask so the model can only see the current token, and the tokens leading up to it which in turn reduces the error from incorporating future information prematurely. This helps enforce *causality* / makes the model *causal* which is a common term thrown around in sequence and timeseries problems which in simple terms is that predictions that happen are based solely on preceding information, ensuring that each prediction is influenced only by the data available up to that point in the sequence.
 
