@@ -1,8 +1,8 @@
 ---
-draft: true
+draft: false
 title: "Attention is All You Need"
 snippet: "This post is an interpretation of the paper \"Attention is All You Need\". The purpose is to extend on The Annotated Transformer by further reordering and simplification of the"
-publishDate: "2024-01-01 00:00"
+publishDate: "2024-04-04 19:43"
 image: {
   src: '/attention-is-all-you-need.png',
   alt: "attention is all you need"
@@ -144,7 +144,7 @@ Multi-Head Attention consists of combining our linear transform step and the sca
 
 ![Multi-Head Attention](../../assets/multihead-attention.png)
 
-The following python snippet is multihead attention example with 3 heads, and no mask or dropout using the attention function we defined earlier. In this example we use a loop to iterate over each individual head sequentially for simplicity. However, in practice, we would want to parallelise this. Note that we are using the same tensor for the query, key and value, this implementation is correct for the Encoder but will change later in the Decoder. However we will code the `Head` to take in all three matrices such as it will work in both cases.
+The following python snippet is multihead attention example with 3 heads, and no mask or dropout using the attention function we defined earlier. In this example we use a loop to iterate over each individual head sequentially for simplicity. However, in practice, we would want to parallelise this. Note that we are using the same tensor for the query, key and value, this implementation is correct for the Encoder but will change later in the Decoder. However we will code the head to take in all three matrices such as it will work in both cases.
 
 ```python
 class Head(torch.nn.Module):
@@ -262,9 +262,9 @@ for _ in range(6)])
 
 ## The Decoder & Masking
 
-Until now, we have ignored a bit of an issue in our attention mechanism which would be detrimental for model training and inference. Right now our model can see tokens in the future when training. This creates an effect where the models predictions are biased since it can already see output in the future. Take a simple example, `["I", "keep", "ice-cream", "in", "my", "freezer"]. Currently while accessing the `Value` matrix with our attention scores we are allowing the model to include weighting from future tokens in the resulting embedding. This means when training to predict the word "ice-cream" the model is given the additional context "in my freezer" when computing probabilities. However as a generative model at inference time we will not have reliable future tokens predicted yet, this means a models output may utilize its own predicted future values in its internal states to generate subsequent tokens. This can lead to a compounding error effect where inaccuracies in predicting future tokens can propagate and amplify errors in subsequent token predictions.
+Until now, we have ignored a bit of an issue in our attention mechanism which would be detrimental for model training and inference. Right now our model can see tokens in the future when training. This creates an effect where the models predictions are biased since it can already see output in the future. Take a simple example, `["I", "keep", "ice-cream", "in", "my", "freezer"]`. Currently while accessing the value matrix with our attention scores we are allowing the model to include weighting from future tokens in the resulting embedding. This means when training to predict the word "ice-cream" the model is given the additional context "in my freezer" when computing probabilities. However as a generative model at inference time we will not have reliable future tokens predicted yet, this means a models output may utilize its own predicted future values in its internal states to generate subsequent tokens. This can lead to a compounding error effect where inaccuracies in predicting future tokens can propagate and amplify errors in subsequent token predictions.
 
-To solve this, for each prediction we apply a mask so the model can only see the current token, and the tokens leading up to it which in turn reduces the error from incorporating future information prematurely. This helps enforce *causality* / makes the model *causal* which is a common term thrown around in sequence and timeseries problems which in simple terms is that predictions that happen are based solely on preceding information, ensuring that each prediction is influenced only by the data available up to that point in the sequence.
+To solve this, for each prediction we apply a mask so the model can only see the current token, and the tokens leading up to it which in turn reduces the error from incorporating future information prematurely. This makes the model *causal* which is a common term thrown around in sequence and timeseries problems which in simple terms means that predictions are based solely on preceding information, ensuring that each prediction is influenced only by the data available up to that point in the sequence.
 
 ![masking](../../assets/masking-words.png)
 
@@ -299,6 +299,7 @@ class Head(torch.nn.Module):
     self.linear_transform_Q = torch.nn.Linear(input_embedding_size, hidden_size)
     self.linear_transform_K = torch.nn.Linear(input_embedding_size, hidden_size)
     self.linear_transform_V = torch.nn.Linear(input_embedding_size, hidden_size)
+
 - def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor) -> torch.Tensor:
 + def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, mask: torch.Tensor | None = None, dropout: torch.nn.Module | None = None) -> torch.Tensor:
     Q = self.linear_transform_Q(x) # batch, sequence, hidden_size
@@ -325,7 +326,7 @@ mask(3)
 #                [True,  True,  True]]])
 ```
 
-With our attention function now containing masking functionality we can create the decoder block. This block is very similar to the encoder, however we add an additional multi-head attention layer which utilises the masking and in the second attention layer we will use the query matrix from the masked attention layer with the key and value matrices from the encoder. This means we will be using a query which has been masked and will only contain information up to the preceding token thus only allowing information from previous positions in the sequence to influence the generation of each subsequent token, preserving the causal nature of the decoder's predictions.
+With our attention function now containing masking functionality we can create the decoder block. This block is very similar to the encoder, however we add an additional multi-head attention layer which utilises the masking and in the second attention layer we will use the query matrix from the masked attention layer with the output matrix from the encoder as the key and value. This means we will be using a query which has been masked and will only contain information up to the preceding token thus only allowing information from previous positions in the sequence to influence the generation of each subsequent token, preserving the causal nature of the decoder's predictions.
 
 ```python
 class DecoderBlock(nn.Module):
@@ -409,7 +410,7 @@ for _ in range(6)])
 
 ## Positional Encoding
 
-The remaining puzzle piece for our transformer model is the positional encoder. Currently the model has no method of telling which order the tokens appear. This means that for an individual token we there is no method for the model to know if the other tokens are within a few words or thousands of words worth of distance. This distance needs to somehow be communicated through to the model. To do this, in the paper there is a sinusoidal embedding added to the input embeddings. Adding these sinusoidal embeddings to the word embeddings pushes tokens in close proximity to each other towards a more similar vector space, if we recall back to our dot-product usage in our attention mechanism we will in turn recognise that this will promote higher attention scores between these tokens. The positional encoding used in the paper consists of sin and cosine functions of different frequencies where $i$ is the index of the dimension of the positional encoding
+The remaining puzzle piece for our transformer model is the positional encoder. Currently the model has no method of telling which order the tokens appear. This means that for an individual token there is no context present for the model to determine whether the other tokens are within a few words or thousands of words worth of distance. This distance needs to somehow be communicated through to the model. To do this, the paper contains a sinusoidal embedding added to the input embeddings. Adding these sinusoidal embeddings to the word embeddings pushes tokens in close proximity to each other towards a more similar vector space, if we recall back to our dot-product usage in our attention mechanism we will in turn recognise that this will promote higher attention scores between these tokens. The positional encoding used in the paper consists of sin and cosine functions of different frequencies where $i$ is the index of the dimension of the positional encoding
 
 $PE(pos,2i) = sin(\frac{pos}{10000^{2i/dmodel}})$
 
@@ -459,7 +460,7 @@ positional_encoder = PositionalEncoder(3)
 
 ## Assembling the Transformer
 
-Now that we have all our necessary components explained and built, we can finally assemble our transformer model. We have our embedding layers for the input and the target sentence. We then add the positional encoding to each of these. We then pass the input sequence to the encoder then pass the target sentence along with the encoder output to the decoder. Finally we pass the output from the decoder through a llinear layer and a softmax to predict the output at each point in the output sequence. Keep in mind, for simplicity we force a sequence length of three so we do not need to mask the input tensor, however in practice we would have to use a mask to be able to concatenate examples into batches. Without this masking of the inputs the model would be able to pay attention to empty tokens which would negatively affect training.
+Now that we have all our necessary components explained and built, we can finally assemble our transformer model. We have our embedding layers for the input and the target sentence. We then add the positional encoding to each of these. We then pass the input sequence to the encoder then pass the target sentence along with the encoder output to the decoder. Finally the output from the decoder is put through a linear layer and a softmax to predict the output at each point in the target sequence. Keep in mind, for simplicity we use a sequence length of three so we do not need to mask the input tensor, however in practice we would have to use a mask to be able to concatenate examples into batches. Without this masking of the inputs the model would pay attention to empty tokens which would negatively affect training.
 
 ```python
 class Transformer(nn.Module):
