@@ -1,0 +1,31 @@
+---
+draft: true
+title: "Bidirectional Encoder Representations from Transformers"
+snippet: ""
+publishDate: "2023-04-04 19:43"
+image: {
+  src: '/attention-is-all-you-need.png',
+  alt: "BERT model"
+}
+category: "Deep Learning"
+author: "Max van Dijck"
+tags: [AI, datascience, deeplearning]
+---
+
+Bidirectional Encoder Representations from Transformers (BERT) is a transformer model shortly introduced after the publication of Attention is All You Need in 2017. 
+Introduced in the paper, is a model which can be applied to problems such as sentiment analysis, sentence pair classification tasks, question answering or named-entity recognition.
+This blog post intends to summarise the architecture alongside PyTorch example implementations to offer an intuitive understanding of BERT.
+We will also cover the unsupervised pre-training and fine-tuning methods in the paper for the various downstream tasks in relation to the architectural design. 
+We hope that through these explanations, the application landscape of BERT is thoroughly demonstrated and that you, the reader, leave with a strong understanding of where BERT can be applied within your own practice. Throughout this blog post we assume knowledge of the transformer architecture and key details such as the attention mechanism & masking, tokenisation and embeddings. 
+
+## Model Architecture
+
+The BERT architecture's primary component is the transformer encoder block. This encoder block is the standard implementation using multi-head attention with the scaled dot-product attention mechanism.
+In the paper the base model is prescribed as having 12 attention layers, each with a hidden size of 768 and 12 heads.
+Therefore we can construct the core encoder component in PyTorch as the following.
+
+
+
+
+
+
