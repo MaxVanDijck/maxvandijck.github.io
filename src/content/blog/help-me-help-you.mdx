@@ -1,0 +1,25 @@
+---
+draft: true
+title: "Help me, help you"
+snippet: "This post offers an interpretation of the paper \"Attention is All You Need\". The purpose is to focus on the architecture explained in the article The Annotated Transformer through"
+publishDate: "2025-06-24 19:43"
+image: {
+  src: '/help-me-help-you.png',
+  alt: "help me, help you"
+}
+category: "Engineering"
+author: "Max van Dijck"
+tags: [Engineering]
+---
+
+
+The more you progress in your career the more patterns you recognise. Consequently, the notion of "Ha, I've seen this before" becomes increasingly frequent. I've gone from a brand new struggling data science intern (I really do sometimes miss that) to belonging on a team where I'm one of the longer tenured engineers. I see all sorts of problems arise which have slowly been accumulated in the rather dusty portions of my neural pathways, from my own mistakes, helping others or simply shared learnings and god forbid P1 incidents. Each time building up my subconcious pattern recognition of "things that break often", silly things like Boto3 giving you an access denied error when calling PutObject because the bucket is in a different account, or that one specific api endpoint which requires a bearer token as opposed to every other endpoint on that service. This pattern recognition is great, but only if you give me the context needed to act as the duster to my brain. In this post we'll look at how to make your questions get answered faster and make other engineers delighted with your specificity with your ability to ask for help, but better.
+
+## Just ask
+If you're in engineering you *should* have a dedicated channel to talk to engineers in your team, most commonly slack but other platforms exist. There's a couple of no-nos to be aware of when you're stuck. First *Is anyone familiar with technology X?*, you'll get two responses, silence from those who aren't and the "Yes, why?". Rather, *I'm using technology X and am running into the following error ...*. Brilliant! Now I can help you straight away, you've successfully reduced the number of hurdles I need to jump through to help you fix your issue. There's also a second benefit, another engineer might not have been familiar with *technology X*, however it just so happens that *technology X* is written in golang which this other engineer is familiar with and they can help too! By just asking, rather than asking for permission to ask a question first theres no pre-qualification that reduces the pool of people that can help you, remember, we all have dusty neurons in our brains.
+
+*Has anyone worked with Terraform before?* becomes: *I'm trying to deploy service X with Terraform, but I’m getting this `Error: Provider not found` when running terraform apply. I’ve already tried reinitializing. Anyone seen this before?*
+
+*I need help with a weird bug — who can I talk to?* becomes: *Hey team, I’m using Redis and running into an issue where keys aren’t expiring as expected. I’ve set TTLs, but they don’t seem to be respected. Can I pair with someone on this?*
+
+You want your question to come across as informative and direct rather than easy to ignore. You want to capture all potential expertise rather disqualifying those that might not thing of themselves as experts. Just ask and get help faster.
